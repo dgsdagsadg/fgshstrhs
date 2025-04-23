@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WordPress Video Player with Auto Thumbnail - Fixed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Tailwind CSS v2.2.19 -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- Font Awesome for Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css">
+  <!-- Google Fonts: Roboto -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@google/fonts@3.3.1/css?family=Roboto:wght@400;700&display=swap">
+  <style>
+    body {
+      background: #f3f4f6;
+      font-family: 'Roboto', 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    @media print {
+      html, body { background: #fff !important; }
+      .shadow-2xl, .shadow-xl, .shadow-lg { box-shadow: none !important; }
+      .rounded-xl, .rounded-lg, .rounded { border-radius: 0 !important; }
+    }
+    .fade-in { animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; }}
+    
+    /* Banner container style */
+    .banner-container {
+      width: 100%;
+      max-width: 2xl;
+      margin: 0 auto;
+      display: flex;
+      justify-content: center;
+      margin-top: 8px;
+    }
+
+    /* Hover Controls Styles */
+    .player-controls {
+      position: absolute;
+      bottom: -50px; /* Start hidden below the player */
+      left: 0;
+      width: 100%;
+      height: 50px;
+      background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.4));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      transition: bottom 0.3s ease;
+      z-index: 25;
+    }
+
+    #video-player:hover .player-controls {
+      bottom: 0; /* Slide up on hover */
+    }
+
+    .control-button {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 1.2rem;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .control-button:hover {
+      color: #ff0000;
+    }
+
+    .controls-left, .controls-right {
+      display: flex;
+      align-items: center;
+    }
+
+    .progress-container {
+      flex-grow: 1;
+      height: 4px;
+      background: rgba(255,255,255,0.2);
+      margin: 0 15px;
+      border-radius: 2px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: #ff0000;
+      border-radius: 2px;
+      width: 0%;
+    }
+    
+    /* Image display styles */
+    #image-display {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      z-index: 5;
+      display: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center py-8 px-2 no-scrollbar">
+
+  <div id="video-player"
+    class="w-full max-w-2xl mx-auto shadow-2xl rounded-xl bg-black relative overflow-hidden">
+    <div id="player-aspect" class="relative w-full" style="padding-bottom: 56.25%;">
+      <!-- Video Thumbnail Canvas -->
+      <canvas id="thumbnail-canvas"
+        class="absolute top-0 left-0 w-full h-full object-cover z-0 bg-black rounded-xl"
+        style="display: block;"></canvas>
+      <!-- Image Display (New) -->
+      <img id="image-display"
+        class="absolute top-0 left-0 w-full h-full object-contain z-5 rounded-xl"
+        style="display: none;" alt="Media content"/>
+      <!-- Video Element (hidden controls) -->
+      <video id="video"
+        class="absolute top-0 left-0 w-full h-full object-contain z-10 rounded-xl"
+        preload="auto"
+        style="display:none;"
+        playsinline
+        webkit-playsinline
+        crossorigin="anonymous">
+        <!-- 
+          ********* SET YOUR VIDEO URL HERE (Replace src below) ********* 
+          For example:
+            <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+        -->
+        <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      <!-- Custom Play Button Overlay -->
+      <button id="play-btn"
+        class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center bg-black bg-opacity-50 rounded-full w-20 h-20 hover:bg-opacity-70 transition-all focus:outline-none border-4 border-white shadow-lg">
+        <i class="fas fa-play text-white text-4xl"></i>
+      </button>
+      <!-- Loading Animation -->
+      <div id="loading-overlay"
+        class="absolute inset-0 z-30 flex items-center justify-center bg-black bg-opacity-40"
+        style="display:none;">
+        <svg class="animate-spin h-14 w-14 text-red-600"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10"
+            stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor"
+            d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+      </div>
+      <!-- Signup Prompt Overlay -->
+      <div id="signup-overlay"
+        class="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black bg-opacity-40 fade-in"
+        style="display:none;">
+        <div class="text-center space-y-5">
+          <div class="text-white text-xl md:text-2xl font-bold mb-3 flex items-center justify-center">
+            <i class="fas fa-lock mr-2"></i>
+            Please create free account to watch full video
+          </div>
+          <a href="https://refreshmentwisertowards.com/fmgc1mbj7i?key=6c1de2c7c0334d3a7cc09645f9317d19" target="_blank"
+            class="inline-block rounded-lg px-8 py-3 bg-red-600 bg-opacity-80 text-white font-semibold shadow hover:bg-red-700 transition-all text-lg"
+            style="backdrop-filter: blur(1px);">
+            Free Sign Up Here
+          </a>
+        </div>
+      </div>
+      <!-- Invisible Aspect Ratio Fallback -->
+      <img id="hidden-thumbnail-fallback"
+        style="display: none;" alt="Thumbnail fallback"/>
+        
+      <!-- Hover Controls - New Addition -->
+      <div class="player-controls">
+        <div class="controls-left">
+          <button class="control-button" id="play-control">
+            <i class="fas fa-play"></i>
+          </button>
+          <button class="control-button" id="volume-control">
+            <i class="fas fa-volume-up"></i>
+          </button>
+        </div>
+        
+        <div class="progress-container">
+          <div class="progress-bar" id="progress"></div>
+        </div>
+        
+        <div class="controls-right">
+          <button class="control-button" id="settings-control">
+            <i class="fas fa-cog"></i>
+          </button>
+          <button class="control-button" id="fullscreen-control">
+            <i class="fas fa-expand"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Banner Ad Container -->
+  <div class="banner-container w-full max-w-2xl mx-auto mt-2">
+    <script type="text/javascript">
+      atOptions = {
+        'key' : 'a16f6c5c2f97f550337197a3f2b77312',
+        'format' : 'iframe',
+        'height' : 90,
+        'width' : 728,
+        'params' : {}
+      };
+    </script>
+    <script type="text/javascript" src="//refreshmentwisertowards.com/a16f6c5c2f97f550337197a3f2b77312/invoke.js"></script>
+  </div>
+
+  <script>
+    // =========> SET YOUR MEDIA URL HERE <==========
+    // Replace the URL below with your desired mp4 file or image
+    // For images, use extensions like .jpg, .png, .gif, etc.
+    // For videos, use extensions like .mp4, .webm, etc.
+    const mediaSrc = "https://pexel.blog/v/fijspswc2816.mp4";
+    // Example image URL: "https://example.com/your-image.jpg"
+    // ==============================================
+
+    const video      = document.getElementById('video');
+    const aspectDiv  = document.getElementById('player-aspect');
+    const thumbnail  = document.getElementById('thumbnail-canvas');
+    const playBtn    = document.getElementById('play-btn');
+    const loading    = document.getElementById('loading-overlay');
+    const signup     = document.getElementById('signup-overlay');
+    const fallbackImg= document.getElementById('hidden-thumbnail-fallback');
+    const imageDisplay = document.getElementById('image-display');
+    
+    // Hover Controls - New Elements
+    const playControl = document.getElementById('play-control');
+    const volumeControl = document.getElementById('volume-control');
+    const settingsControl = document.getElementById('settings-control');
+    const fullscreenControl = document.getElementById('fullscreen-control');
+    const progressBar = document.getElementById('progress');
+    
+    // Function to check if the URL is an image
+    function isImageURL(url) {
+      return /\.(jpg|jpeg|png|gif|bmp|webp|svg|avif)$/i.test(url);
+    }
+
+    // Handle different media types
+    const isImage = isImageURL(mediaSrc);
+    
+    if (isImage) {
+      // If it's an image, display it directly
+      imageDisplay.src = mediaSrc;
+      imageDisplay.style.display = 'block';
+      
+      // Set the image aspect ratio once it's loaded
+      imageDisplay.onload = function() {
+        setAspectRatio(this.naturalWidth, this.naturalHeight);
+        // Hide the canvas since we're showing the image
+        thumbnail.style.display = 'none';
+      };
+      
+      // Hide video related elements
+      video.style.display = 'none';
+    } else {
+      // It's a video, proceed with normal video loading
+      video.querySelector('source').src = mediaSrc;
+      video.load();
+    }
+
+    // Set container aspect ratio dynamically
+    function setAspectRatio(width, height) {
+      if (width && height) {
+        aspectDiv.style.paddingBottom = (height / width) * 100 + "%";
+      } else {
+        aspectDiv.style.paddingBottom = "56.25%";
+      }
+    }
+
+    // Draw first frame as thumbnail on canvas (for videos only)
+    function drawFirstFrame() {
+      if (isImage) return; // Skip for images
+      
+      // Hide thumbnail/fallback first, will show if worked
+      thumbnail.style.display = 'none';
+      fallbackImg.style.display = 'none';
+      // Try to capture the first frame after metadata loaded
+      function capture() {
+        try {
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          if (vw === 0 || vh === 0) return; // not ready
+          setAspectRatio(vw, vh);
+          thumbnail.width = vw;
+          thumbnail.height = vh;
+          const ctx = thumbnail.getContext('2d');
+          ctx.clearRect(0,0,vw,vh);
+          ctx.drawImage(video, 0, 0, vw, vh);
+          thumbnail.style.display = 'block';
+        } catch (e) {
+          thumbnail.style.display = 'none';
+          fallbackImg.style.display = 'none';
+        }
+        video.currentTime = 0; // Back to start for posterity
+      }
+      // Run on seeked
+      function onSeekedOnce() { video.removeEventListener('seeked', onSeekedOnce); setTimeout(capture, 50);}
+      video.addEventListener('seeked', onSeekedOnce);
+      // Seek a bit to ensure a frame is there
+      try { video.currentTime = 0.1; } catch(e) {}
+    }
+
+    // On loadedmetadata, get size and try to draw frame (for videos)
+    video.addEventListener('loadedmetadata', function() {
+      if (isImage) return; // Skip for images
+      setAspectRatio(video.videoWidth, video.videoHeight);
+      drawFirstFrame();
+    });
+
+    // Handle Play Button (for both image and video)
+    playBtn.addEventListener('click', function() {
+      playBtn.style.display = 'none';
+      loading.style.display = 'flex';
+      setTimeout(() => {
+        loading.style.display = 'none';
+        signup.style.display = 'flex';
+      }, 1000);
+    });
+    
+    // Handle Controls Clicks - Just for visual effect
+    playControl.addEventListener('click', function() {
+      // Since we're showing signup overlay, these controls are just for appearance
+      playBtn.click(); // Trigger the main play button action
+    });
+
+    // On startup, ensure only thumbnail/image & play are visible
+    window.addEventListener('DOMContentLoaded', function() {
+      signup.style.display = 'none';
+      loading.style.display = 'none';
+      playBtn.style.display = 'flex';
+      
+      if (!isImage) {
+        // For videos
+        video.style.display = 'none';
+        imageDisplay.style.display = 'none';
+      } else {
+        // For images
+        thumbnail.style.display = 'none';
+        video.style.display = 'none';
+      }
+      
+      // Set initial progress (just for appearance)
+      progressBar.style.width = '0%';
+    });
+
+    // On resizing, maintain aspect ratio
+    window.addEventListener('resize', function() {
+      if (isImage && imageDisplay.naturalWidth > 0) {
+        setAspectRatio(imageDisplay.naturalWidth, imageDisplay.naturalHeight);
+      } else if (!isImage && video.videoWidth > 0) {
+        setAspectRatio(video.videoWidth, video.videoHeight);
+      }
+    });
+    
+    // For demo purposes - update progress bar randomly to simulate movement
+    let fakeProgress = 0;
+    setInterval(() => {
+      if (signup.style.display === 'flex') {
+        // If signup is showing, simulate some progress
+        fakeProgress = Math.min(fakeProgress + 0.5, 30); // Max 30%
+        progressBar.style.width = fakeProgress + '%';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
